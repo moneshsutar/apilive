@@ -1,10 +1,10 @@
 import { initializeApp, getApps } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
+import { getFirestore } from 'firebase/firestore';
 
 /**
  * Firebase Client Configuration
- * ONLY used for Authentication — NO Firestore/DB operations here
- * All data operations go through the backend API
+ * Public keys safe for frontend use
  */
 
 const firebaseConfig = {
@@ -19,5 +19,6 @@ const firebaseConfig = {
 // Initialize Firebase (prevent duplicate initialization)
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
 const auth = getAuth(app);
+const db = getFirestore(app);
 
-export { app, auth };
+export { app, auth, db };
