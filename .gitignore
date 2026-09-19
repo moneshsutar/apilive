@@ -7,8 +7,6 @@ node_modules/
 out/
 
 # Environment files
-frontend/.env
-backend/.env
 
 .env*.local
 *.env
@@ -16,7 +14,6 @@ backend/.env
 # Secrets & Credentials
 *serviceAccountKey.json
 serviceAccountKey.json
-backend/serviceAccountKey.json
 
 # Logs
 npm-debug.log*
