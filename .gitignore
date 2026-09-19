@@ -8,8 +8,6 @@ out/
 
 # Environment files
 
-.env*.local
-*.env
 
 # Secrets & Credentials
 

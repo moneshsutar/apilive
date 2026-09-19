@@ -13,6 +13,7 @@ async function apiRequest(endpoint, options = {}) {
     method,
     headers: {
       'Content-Type': 'application/json',
+      'Accept': 'application/json',
       'ngrok-skip-browser-warning': 'true',
       ...headers,
     },
@@ -28,12 +29,31 @@ async function apiRequest(endpoint, options = {}) {
 
   const response = await fetch(`${API_BASE}${endpoint}`, config);
 
+  // Check if response has application/json content-type
+  const contentType = response.headers.get('content-type') || '';
+  const isJson = contentType.includes('application/json');
+
   if (!response.ok) {
-    const error = await response.json().catch(() => ({ message: 'Request failed' }));
-    throw new Error(error.message || `API Error: ${response.status}`);
+    let errorMessage = `API Error: ${response.status}`;
+    if (isJson) {
+      const errorData = await response.json().catch(() => null);
+      if (errorData && (errorData.message || errorData.error)) {
+        errorMessage = errorData.message || errorData.error;
+      }
+    } else {
+      const text = await response.text().catch(() => '');
+      if (text && text.length < 200) {
+        errorMessage = text;
+      }
+    }
+    throw new Error(errorMessage);
   }
 
-  return response.json();
+  if (isJson) {
+    return response.json();
+  }
+
+  return response.text();
 }
 
 // ─── Auth ─────────────────────────────────────────────────
