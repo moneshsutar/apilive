@@ -1,5 +1,5 @@
-import { db } from './firebase-client';
-import { collection, getDocs } from 'firebase/firestore';
+import { db, auth } from './firebase-client';
+import { collection, getDocs, doc, getDoc, setDoc } from 'firebase/firestore';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
 
@@ -175,11 +175,71 @@ export async function getPaymentReceipt(token, paymentId) {
 
 // ─── Webhooks ─────────────────────────────────────────────
 export async function getWebhookConfig(token) {
-  return apiRequest('/webhooks', { token });
+  // 1. Try direct client-side Firestore access first
+  try {
+    const user = auth.currentUser;
+    if (user) {
+      const docSnap = await getDoc(doc(db, 'webhookConfigs', user.uid));
+      if (docSnap.exists()) {
+        return { webhookConfig: docSnap.data() };
+      } else {
+        return {
+          webhookConfig: {
+            openResultWebhook: { url: '' },
+            closeResultWebhook: { url: '' },
+            status: 'inactive',
+          },
+        };
+      }
+    }
+  } catch (clientErr) {
+    console.warn('Direct Firestore getWebhookConfig error, trying API:', clientErr);
+  }
+
+  // 2. Try API endpoint
+  try {
+    return await apiRequest('/webhooks', { token });
+  } catch (apiErr) {
+    console.warn('API getWebhookConfig failed, returning default:', apiErr.message);
+    return {
+      webhookConfig: {
+        openResultWebhook: { url: '' },
+        closeResultWebhook: { url: '' },
+        status: 'inactive',
+      },
+    };
+  }
 }
 
 export async function updateWebhookConfig(token, data) {
-  return apiRequest('/webhooks', { method: 'PUT', body: data, token });
+  // 1. Try API first
+  try {
+    return await apiRequest('/webhooks', { method: 'PUT', body: data, token });
+  } catch (apiErr) {
+    console.warn('API updateWebhookConfig failed, saving directly to Firestore:', apiErr.message);
+    // 2. Direct fallback to client-side Firestore
+    const user = auth.currentUser;
+    if (user) {
+      const status = data.openResultWebhookUrl || data.closeResultWebhookUrl ? 'active' : 'inactive';
+      const updateData = {
+        userId: user.uid,
+        userEmail: user.email || '',
+        openResultWebhook: {
+          url: data.openResultWebhookUrl ? data.openResultWebhookUrl.trim() : '',
+          updatedAt: new Date().toISOString(),
+        },
+        closeResultWebhook: {
+          url: data.closeResultWebhookUrl ? data.closeResultWebhookUrl.trim() : '',
+          updatedAt: new Date().toISOString(),
+        },
+        status,
+        updatedAt: new Date().toISOString(),
+      };
+      await setDoc(doc(db, 'webhookConfigs', user.uid), updateData, { merge: true });
+      return { success: true, webhookConfig: updateData };
+    }
+    throw apiErr;
+  }
 }
 
 // ─── Admin ────────────────────────────────────────────────
