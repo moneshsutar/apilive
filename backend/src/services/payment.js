@@ -121,31 +121,6 @@ async function createPaymentOrder(userId, subscriptionId, planId, options = {}) 
     order: orderData,
   };
 }
-      ...orderData,
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-    });
-
-    if (subscriptionId) {
-      await db.collection('subscriptions').doc(subscriptionId).update({
-        orderId,
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-      });
-    }
-  } catch (dbErr) {
-    console.warn('Payment order Firestore save warning (proceeding with order):', dbErr.message);
-  }
-
-  return {
-    orderId,
-    gatewayOrderId,
-    amount: plan.price || 1999,
-    currency: plan.currency || 'INR',
-    paymentUrl,
-    imbResponseData,
-    order: orderData,
-  };
-}
 
 /**
  * Process payment gateway webhook
