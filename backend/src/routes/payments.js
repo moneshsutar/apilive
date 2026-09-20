@@ -28,6 +28,7 @@ router.post('/create-order', authenticate, async (req, res) => {
       amount: req.body.amount,
       planName: req.body.planName,
       durationMonths: req.body.durationMonths,
+      startDate: req.body.startDate,
       customerName: req.user.displayName || req.body.customerName,
       customerEmail: req.user.email || req.body.customerEmail,
       customerMobile: req.user.phone || req.body.customerMobile,

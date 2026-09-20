@@ -88,24 +88,14 @@ function CheckoutContent() {
       const token = await getToken();
       const subId = `sub_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
 
-      // Step 1: Save subscription in parallel using DB plan details
-      createSubscription(token, {
-        subscriptionId: subId,
-        planId: plan?.id || planId,
-        startDate,
-        price: plan?.price,
-        durationMonths: plan?.durationMonths,
-      }).catch((subErr) => {
-        console.warn('Subscription save in background:', subErr.message);
-      });
-
-      // Step 2: Create payment order directly with DB plan price (single fast call)
+      // Create payment order & single subscription directly with DB plan price (single fast call)
       const orderRes = await createPaymentOrder(token, {
         subscriptionId: subId,
         planId: plan?.id || planId,
         planName: plan?.name,
         amount: plan?.price,
         durationMonths: plan?.durationMonths,
+        startDate,
       });
 
       // Step 3: Redirect to UPI payment gateway scanner immediately!

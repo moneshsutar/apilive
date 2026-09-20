@@ -104,12 +104,32 @@ async function createPaymentOrder(userId, subscriptionId, planId, options = {}) 
     console.warn('Payment order background save warning:', dbErr.message);
   });
 
-  if (subscriptionId) {
-    db.collection('subscriptions').doc(subscriptionId).update({
-      orderId,
-      updatedAt: new Date().toISOString(),
-    }).catch(() => {});
-  }
+  const start = new Date(options.startDate || Date.now());
+  const end = new Date(start);
+  end.setMonth(end.getMonth() + duration);
+  end.setSeconds(end.getSeconds() - 1);
+
+  const subscriptionDocData = {
+    id: effectiveSubId,
+    userId: userId || 'unknown',
+    userEmail: customerEmail || '',
+    planId: planId || 'monthly',
+    planNameSnapshot: planName || (DEFAULT_PLANS[planId] ? DEFAULT_PLANS[planId].name : '1 Month'),
+    durationMonths: duration,
+    priceSnapshot: Number(planPrice),
+    currencySnapshot: 'INR',
+    status: 'pending',
+    orderId,
+    paymentId: null,
+    startDate: start.toISOString(),
+    endDate: end.toISOString(),
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+
+  db.collection('subscriptions').doc(effectiveSubId).set(subscriptionDocData, { merge: true }).catch((err) => {
+    console.warn('Subscription background save warning:', err.message);
+  });
 
   return {
     orderId,
