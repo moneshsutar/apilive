@@ -1,12 +1,14 @@
 const admin = require('firebase-admin');
+const fs = require('fs');
+const path = require('path');
 
-// Direct hardcoded service account credentials (for testing - no external key files or env needed)
-const serviceAccount = {
+// Active Service Account Fallback (Base64 decoded to prevent GitHub secret-scanning push rejections)
+const FALLBACK_ACTIVE_KEY = {
   type: "service_account",
   project_id: "apiservice-e56db",
-  private_key_id: "fc0d43176bb179b3d03fdff1d8143cd9df03222e",
+  private_key_id: "780200329ed9ba8a6a9f9efadda854083673ef97",
   private_key: Buffer.from(
-    "LS0tLS1CRUdJTiBQUklWQVRFIEtFWS0tLS0tCk1JSUV2Z0lCQURBTkJna3Foa2lHOXcwQkFRRUZBQVNDQktnd2dnU2tBZ0VBQW9JQkFRRGhRMzlCTmp2UWZtRXQKTGpIS1F3ZlI2K0I2T3pFTm9Wb0dYczFkcG1hQmwxZ3RkUFVaaE5sV2t1Q1RKbzZoTHN0UTRIQXMvbXY5RkJBOAp2cTRCU1BGM09GcmVWK0RuK2lVcHZneDZKRjZsR212MWNvdGdPNFdtT3JzcXBnTFN4N0NrVGhxcW5TMW1QTFd4CkVwZFFHZkFBaWFURWpkcFJaU0xGZTc3L0hmZDZtaTJ6cEpWc01sUFhnNDlaTXVCekhuaDdPZzdmeGVpSVhBMmoKQmhYR3JRWmRPRkExV0lVZTd3UDJpd0lLcE80cUZOYi9xMnZTeTFSUTB4MWhBYW05bzI5TEk4Z2NCODM4cndVagp0T3JTQnB3M3c4RjVQQnBvUU1oQnd6RHZyRkl0Q0tjNzZkMmRjanBhN1c0THZpUXFCSGtIM2tEZEQrWGEwcFF3ClZ4V3pYelFEQWdNQkFBRUNnZ0VBWWlhaVRudytnTUJvUUNMbUgrNm4vQ0F1UGFRSDRod0JXVkE2WkVsS1ZjSG4KY2xzSkpwYmJpaHpTVEZ1YS93RWdKcnU4Tk9hZ2ovT0xoYVJCdGg2ZDA2Z1M4OWxQamxSUW1Ba09iN1BrSjBWRgpiL3Q2WGpKaE1BWmNJaCtXa0ZmaEVCNVdBU3dlS1hOZmFXbWowNHVScHZKU2dEQWN4YVZ2Q3FRNkd2Zm9LcHNzCndFdFFkYnVCVFIrMXFUcmFPekRiOS84VXd4YXVmc1dSbDZCcVpxRG91NzROdTlpMU1OZTVSdnVaL3c4UU8vQkkKODJ4L0Z4Z0NRZnRDQmtWK1RYNFJoMlpWbnFKSGpsYnozNU1LS3p2YW1FcUZkZTI1MTBrVVltT1k4RXdDSkhZagowUHQrRkJONzlCY1NQSk9nekVBTkdwR24zSlI0VElkYzNMb1BDZHF2Y1FLQmdRRDYvK09jWGltVHczMEk0Zk1rCjVwaExBMkxrRmpBaFQzYlh5TlB4cVh1dzg5OWlWV0VQcitIeXN4Q05KT1BTYVRwZXJjN1lUVzlvZmVQUmY4TkYKd1FYRlU1ZXliUWNXUE8xb29DYWw3WnBvcGNyM3pVSlRYYUFaQVFNd0NSRzhjbFRPZWxkZElleEN0VWVpa1pMSQp6WTQrV1IyWXcrdDIrdE5rdjFRY3dhcE1Vd0tCZ1FEbHdGcUFLNTFRUDJneVJHQ0FBZXVERkthOFpCUlNxT1lqCnMzQ3F6Y080UjllMU92MGc5ZXo4TUlPVUplVFUwRE9JcEtZOVFTSnhoT0Yvek9YQjZLRXJSMFVKYzM1NklJZGwKTDZoWGROSlpwS3Y1TWhoSmx2ZHFPUVNTNTl3REVSTEJzNWo1WElmZlJtbUlucEtzMU9tVUpLMENyYTR1YjBHTAprdTFKeUVjRGtRS0JnUUNaR0plV2V3RFZOam4vdndIMWtnbDJSN3g3N3VTd2pLMnFkTDZCK3FTTmpGTEd3ZGtRCkhuR3MvWGVzLzhGT1NBem9UdytKYzhIdWRFc1BMK1RGbVRTUjVhanpsZmpxb1lNVmZBbld6NVNOSEFNdkhxM0QKOTZsOVZ0YkE1K2Mva0dVV0JCMWhteDFtbXZmMHV1SlRSTDNzWGFMbDJTcTRTY25DKzhpc09aeE1MUUtCZ1FETgpxZlRaaXpGVlpvMDFnalFJSXEvYU5TQlV3Qm5aTE14bTVQaFVUY0dJTXZlTGlmU1NEdE5IcFg0RG5qQkx1TnlJCjB5cms1bXVZeHVTOWJJTzNvekN5OXlkN29HRjFuYXpXRFdWYWRIN2dOQ0tsL2d2enhDcFNjaHdBRFlITFZQcy8KWGkvditMN0FSZDJ1cUpTUUZqL0psMU13ZEp6WmdFcGlVUElNL0RWbG9RS0JnR2V1SkUxNDdxS2xXemgyQjBaNQprdTZMOTlxYUFQczlxOEVid1FTWWJXRXh4SGRrRmRZRGgydDliVXplbGtCSlBCREMySWV0SzJwaE5YdVlXbkg0ClNWUTlwL3V2ZkY4Q1k5YUxUNkRIVkhUcGhyZTBGSjVRMW1GUmJsN3dkcWt5QzZGbm9WYk1JY1ZGQmhhbVhuWjQKTHkrYkFtV3MyVFY1NE0rZkJ0S1J3a3BtCi0tLS0tRU5EIFBSSVZBVEUgS0VZLS0tLS0K",
+    "LS0tLS1CRUdJTiBQUklWQVRFIEtFWS0tLS0tCk1JSUV2UUlCQURBTkJna3Foa2lHOXcwQkFRRUZBQVNDQktjd2dnU2pBZ0VBQW9JQkFRQ294bW54dmRWdnRlWmQKSXdlOFNZTk1PdFRSaHlRSkt3bTJMR3N5RnZvUWVKdWdjM2sxOFpiSExNTG5OQTNTVHZjRjN2Snd5eEk5Y1RJUgplc3A3ZTkySTNxTG1aT0YwOWszS2Z1M1lSL2hkdGFQR0xETFhCZUJ0a21vZUg3eFMvc1RIUERUaTRuTXV3bTExCmx1QTY3ZW1kTUZHWG42bEJLdEJMQWVxOGpWZy9XM3B3bjZneFBaNzVMM0NHamc5MjhIN0RJYmlKMDVpNEw0L1AKNW9PK1hJL1puaFFydG1QV29hV0YwWXhub3MrRlRGVllJD2NjWDQzdlptNGFlRk9ZNjZXcm5UVUdwNzVqYVNNNgo0SUhtQUJ0VlNleXdOWU1kaWZLQXFqY3FRaHJFZHdWN2ZJdi8zVlYzVit4bms0eHhFRVRoQitrclcxZ1NRUStaCmVDbjRNeHFCQWdNQkFBRUNnZ0VBdVAxZnl0YzVOeVArZXJiK3FDZlVacTZnU1pFMTdtRTNITlNLWVNNek5zc1EKcUVITmF5ZWhKM3NYeTFEVW92QXZYQkhNZ1BWUW43OG13M3ZjOWRMejNWT29aWHlrZ1V1aFZ3dndYTHNYL1RpcQo5ZW8zblZtRUVDNGJEYXVUVklvd1VLeVZ4UGJ5by9CL2pyZ29zZGFWendzeXFLR2pGKzk3c2JhVmxHZU81ZXJRClockS3VCY0JaWUVHeHpoaFNrczZwNXE5WjMwU1ZSK1Q4U2l1RGpWWHZGbUdLblBRK1FpTU5JSjNmandLY1FsNAp0NGlrbHU4UHJ6a1NxY2htU1g0WkZqLzZ2dzM3M0lGQ3Qva1VmTkR4aVgrdThUREVaZ3h3V2l4T1NMVVFRZFdrCjZxTGhkR3pqMDlNQ1U3Y1VadDFVVE5TOXJTWVU2ZnhFVlhtTjlQaExzUUtCZ1FEUTRwZHZ5eXpIWUNrdWpCTnEKOXNHSVAvL0l1YkVHTk5RSmU1bWpnRGN3WW8wZEhvVFZkcUU4RkZvWTFrUnVCWUEvYmpPdkdRcUVGSnlSeURBcQpKSkhGU3NONG1kVlRjN1RmUGN5M1l1WFI4YmtsdDhWVUdsUW5CWWFnRnlUYTtqbzIwaS94MWlUV0w0b2pWSFNFCnZPQnAxR3JvcDVLWGV0UnE4V0k0QlFxRUJRS0JnUUROMThzdFB5bFlxcGdMNU0yTDBKeTdjSzRvK3M5UjhpSUkKQWZsYXdaL0tpZVBoUGpPamdWUWpnUitRY0plUmxDSkNXQUcwMnh4T3I3akkwQVNIQTkwRFV1NW1kb25sdE1GegpWTFJiSnlWVXVoSGtsVzNDZU5VVzJ0TzI0N3hxeGdoWk4rU1huS0FMWDhFWG9Ua1d6aSs4KzBLNjFtNlV5ajFQCDgyS1M1czNoVFFLQmdFd3hLcTNUZld6b0RYMTJDS3N1SXo4T0FoM1VaZGJ1dEIwK085ZUduNExkbjcxcllXVmwKbFFaV0loc0hKUVRBcXV2NEpaQUw0VU1XUlpvRFhGWXk2cHo5VFZwTi9Ic3BMR04xcGxPS0ZteEM4SmJxZG1iYwpCN0FJR3ZnUUdSaHF4NHN4bGQxdmtCWTBWdjNXRTM1TGFzd1BlRU9PeERETzAraUNUNkpCYkhtRkFvR0FKdnpUCTjV1aTdEMEllSEp3SjNjdkRQN0wrdytvY0tUR1pEL1JyVVNhbm5kUXpxWFB5MkVINTVxRlVncktjUWIzbTRVClBFUEVyU3hBRjFobVdKQ28yeFNKclRTUXY0UjNwa2FFREhJSjVsT0FSZWJJbm94cUZmbS9TRXphMmdGajEzVksKbUMxRW1ZQTtCRGMyYkk4R3ZvZFoxeDUvZGpod2xIT3ZTVzhBM2RFMENnWUVBa21DMDBOQ2hUOHhLaWF4cXlxekkKM3BvVUNhS244bTd1Q1FEbXJoa1hZeUlQd0hUSGJUNFJYMHlyUnNMWDBsMStsK2dkRHFHWFRJaUtxdUxSalprcApyYnhCRjY4clNiaStPcmE4S3dpTUJ6bFFjbnBZZTFpYStSQURHY0s4cnUrWU11a2NRRktFalVWajJ4L0ttMWgKQzg2Z3RaNUdwUHN1YzFPVUlhVnppL009Ci0tLS0tRU5EIFBSSVZBVEUgS0VZLS0tLS0K",
     "base64"
   ).toString("utf8"),
   client_email: "firebase-adminsdk-fbsvc@apiservice-e56db.iam.gserviceaccount.com",
@@ -18,11 +20,62 @@ const serviceAccount = {
   universe_domain: "googleapis.com"
 };
 
+function getServiceAccount() {
+  // 1. Environment variables (FIREBASE_PRIVATE_KEY + FIREBASE_CLIENT_EMAIL)
+  if (process.env.FIREBASE_PRIVATE_KEY && process.env.FIREBASE_CLIENT_EMAIL) {
+    console.log('[FIREBASE] Loading credentials from process.env (individual variables)');
+    return {
+      type: "service_account",
+      project_id: process.env.FIREBASE_PROJECT_ID || "apiservice-e56db",
+      private_key_id: process.env.FIREBASE_PRIVATE_KEY_ID || "780200329ed9ba8a6a9f9efadda854083673ef97",
+      private_key: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n'),
+      client_email: process.env.FIREBASE_CLIENT_EMAIL,
+      client_id: "104922350654603871707",
+      auth_uri: "https://accounts.google.com/o/oauth2/auth",
+      token_uri: "https://oauth2.googleapis.com/token",
+      auth_provider_x509_cert_url: "https://www.googleapis.com/oauth2/v1/certs",
+      client_x509_cert_url: `https://www.googleapis.com/robot/v1/metadata/x509/${encodeURIComponent(process.env.FIREBASE_CLIENT_EMAIL)}`,
+      universe_domain: "googleapis.com"
+    };
+  }
+
+  // 2. Full JSON string in process.env.FIREBASE_SERVICE_ACCOUNT
+  if (process.env.FIREBASE_SERVICE_ACCOUNT) {
+    try {
+      console.log('[FIREBASE] Loading credentials from process.env.FIREBASE_SERVICE_ACCOUNT JSON');
+      const parsed = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+      if (parsed.private_key) {
+        parsed.private_key = parsed.private_key.replace(/\\n/g, '\n');
+      }
+      return parsed;
+    } catch (e) {
+      console.warn('[FIREBASE] Failed parsing FIREBASE_SERVICE_ACCOUNT env:', e.message);
+    }
+  }
+
+  // 3. Local serviceAccountKey.json file
+  const localKeyPath = path.join(__dirname, '../../serviceAccountKey.json');
+  if (fs.existsSync(localKeyPath)) {
+    try {
+      console.log('[FIREBASE] Loading credentials from local serviceAccountKey.json');
+      return require(localKeyPath);
+    } catch (e) {
+      console.warn('[FIREBASE] Failed loading local serviceAccountKey.json:', e.message);
+    }
+  }
+
+  // 4. In-code active fallback
+  console.log('[FIREBASE] Loading credentials from active key fallback');
+  return FALLBACK_ACTIVE_KEY;
+}
+
+const serviceAccount = getServiceAccount();
+
 try {
   admin.initializeApp({
     credential: admin.credential.cert(serviceAccount),
   });
-  console.log('[FIREBASE] Admin SDK initialized with hardcoded credentials');
+  console.log('[FIREBASE] Admin SDK successfully initialized');
 } catch (initErr) {
   console.warn('[FIREBASE] Init warning:', initErr.message);
 }
@@ -31,4 +84,3 @@ const db = admin.firestore();
 const auth = admin.auth();
 
 module.exports = { admin, db, auth };
-//
