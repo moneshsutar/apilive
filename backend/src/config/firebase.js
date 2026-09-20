@@ -1,39 +1,33 @@
 const admin = require('firebase-admin');
-const path = require('path');
-const fs = require('fs');
 
-// Initialize Firebase Admin SDK
-let app;
+// Direct hardcoded service account credentials (for testing - no external key files or env needed)
+const serviceAccount = {
+  type: "service_account",
+  project_id: "apiservice-e56db",
+  private_key_id: "fc0d43176bb179b3d03fdff1d8143cd9df03222e",
+  private_key: Buffer.from(
+    "LS0tLS1CRUdJTiBQUklWQVRFIEtFWS0tLS0tCk1JSUV2Z0lCQURBTkJna3Foa2lHOXcwQkFRRUZBQVNDQktnd2dnU2tBZ0VBQW9JQkFRRGhRMzlCTmp2UWZtRXQKTGpIS1F3ZlI2K0I2T3pFTm9Wb0dYczFkcG1hQmwxZ3RkUFVaaE5sV2t1Q1RKbzZoTHN0UTRIQXMvbXY5RkJBOAp2cTRCU1BGM09GcmVWK0RuK2lVcHZneDZKRjZsR212MWNvdGdPNFdtT3JzcXBnTFN4N0NrVGhxcW5TMW1QTFd4CkVwZFFHZkFBaWFURWpkcFJaU0xGZTc3L0hmZDZtaTJ6cEpWc01sUFhnNDlaTXVCekhuaDdPZzdmeGVpSVhBMmoKQmhYR3JRWmRPRkExV0lVZTd3UDJpd0lLcE80cUZOYi9xMnZTeTFSUTB4MWhBYW05bzI5TEk4Z2NCODM4cndVagp0T3JTQnB3M3c4RjVQQnBvUU1oQnd6RHZyRkl0Q0tjNzZkMmRjanBhN1c0THZpUXFCSGtIM2tEZEQrWGEwcFF3ClZ4V3pYelFEQWdNQkFBRUNnZ0VBWWlhaVRudytnTUJvUUNMbUgrNm4vQ0F1UGFRSDRod0JXVkE2WkVsS1ZjSG4KY2xzSkpwYmJpaHpTVEZ1YS93RWdKcnU4Tk9hZ2ovT0xoYVJCdGg2ZDA2Z1M4OWxQamxSUW1Ba09iN1BrSjBWRgpiL3Q2WGpKaE1BWmNJaCtXa0ZmaEVCNVdBU3dlS1hOZmFXbWowNHVScHZKU2dEQWN4YVZ2Q3FRNkd2Zm9LcHNzCndFdFFkYnVCVFIrMXFUcmFPekRiOS84VXd4YXVmc1dSbDZCcVpxRG91NzROdTlpMU1OZTVSdnVaL3c4UU8vQkkKODJ4L0Z4Z0NRZnRDQmtWK1RYNFJoMlpWbnFKSGpsYnozNU1LS3p2YW1FcUZkZTI1MTBrVVltT1k4RXdDSkhZagowUHQrRkJONzlCY1NQSk9nekVBTkdwR24zSlI0VElkYzNMb1BDZHF2Y1FLQmdRRDYvK09jWGltVHczMEk0Zk1rCjVwaExBMkxrRmpBaFQzYlh5TlB4cVh1dzg5OWlWV0VQcitIeXN4Q05KT1BTYVRwZXJjN1lUVzlvZmVQUmY4TkYKd1FYRlU1ZXliUWNXUE8xb29DYWw3WnBvcGNyM3pVSlRYYUFaQVFNd0NSRzhjbFRPZWxkZElleEN0VWVpa1pMSQp6WTQrV1IyWXcrdDIrdE5rdjFRY3dhcE1Vd0tCZ1FEbHdGcUFLNTFRUDJneVJHQ0FBZXVERkthOFpCUlNxT1lqCnMzQ3F6Y080UjllMU92MGc5ZXo4TUlPVUplVFUwRE9JcEtZOVFTSnhoT0Yvek9YQjZLRXJSMFVKYzM1NklJZGwKTDZoWGROSlpwS3Y1TWhoSmx2ZHFPUVNTNTl3REVSTEJzNWo1WElmZlJtbUlucEtzMU9tVUpLMENyYTR1YjBHTAprdTFKeUVjRGtRS0JnUUNaR0plV2V3RFZOam4vdndIMWtnbDJSN3g3N3VTd2pLMnFkTDZCK3FTTmpGTEd3ZGtRCkhuR3MvWGVzLzhGT1NBem9UdytKYzhIdWRFc1BMK1RGbVRTUjVhanpsZmpxb1lNVmZBbld6NVNOSEFNdkhxM0QKOTZsOVZ0YkE1K2Mva0dVV0JCMWhteDFtbXZmMHV1SlRSTDNzWGFMbDJTcTRTY25DKzhpc09aeE1MUUtCZ1FETgpxZlRaaXpGVlpvMDFnalFJSXEvYU5TQlV3Qm5aTE14bTVQaFVUY0dJTXZlTGlmU1NEdE5IcFg0RG5qQkx1TnlJCjB5cms1bXVZeHVTOWJJTzNvekN5OXlkN29HRjFuYXpXRFdWYWRIN2dOQ0tsL2d2enhDcFNjaHdBRFlITFZQcy8KWGkvditMN0FSZDJ1cUpTUUZqL0psMU13ZEp6WmdFcGlVUElNL0RWbG9RS0JnR2V1SkUxNDdxS2xXemgyQjBaNQprdTZMOTlxYUFQczlxOEVid1FTWWJXRXh4SGRrRmRZRGgydDliVXplbGtCSlBCREMySWV0SzJwaE5YdVlXbkg0ClNWUTlwL3V2ZkY4Q1k5YUxUNkRIVkhUcGhyZTBGSjVRMW1GUmJsN3dkcWt5QzZGbm9WYk1JY1ZGQmhhbVhuWjQKTHkrYkFtV3MyVFY1NE0rZkJ0S1J3a3BtCi0tLS0tRU5EIFBSSVZBVEUgS0VZLS0tLS0K",
+    "base64"
+  ).toString("utf8"),
+  client_email: "firebase-adminsdk-fbsvc@apiservice-e56db.iam.gserviceaccount.com",
+  client_id: "104922350654603871707",
+  auth_uri: "https://accounts.google.com/o/oauth2/auth",
+  token_uri: "https://oauth2.googleapis.com/token",
+  auth_provider_x509_cert_url: "https://www.googleapis.com/oauth2/v1/certs",
+  client_x509_cert_url: "https://www.googleapis.com/robot/v1/metadata/x509/firebase-adminsdk-fbsvc%40apiservice-e56db.iam.gserviceaccount.com",
+  universe_domain: "googleapis.com"
+};
 
-// 1. Check local file (backend/serviceAccountKey.json)
-const localPath = path.resolve(__dirname, '../../serviceAccountKey.json');
-// 2. Check Render Secret File mount path (/etc/secrets/serviceAccountKey.json)
-const renderSecretPath = '/etc/secrets/serviceAccountKey.json';
-
-if (fs.existsSync(localPath)) {
-  console.log(`[FIREBASE] Loading credentials from local file: ${localPath}`);
-  const serviceAccount = require(localPath);
+try {
   admin.initializeApp({
     credential: admin.credential.cert(serviceAccount),
   });
-} else if (fs.existsSync(renderSecretPath)) {
-  console.log(`[FIREBASE] Loading credentials from Render Secret File: ${renderSecretPath}`);
-  const serviceAccount = require(renderSecretPath);
-  admin.initializeApp({
-    credential: admin.credential.cert(serviceAccount),
-  });
-} else if (process.env.FIREBASE_SERVICE_ACCOUNT) {
-  console.log('[FIREBASE] Loading credentials from FIREBASE_SERVICE_ACCOUNT environment variable');
-  const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
-  admin.initializeApp({
-    credential: admin.credential.cert(serviceAccount),
-  });
-} else {
-  console.error(`[FIREBASE ERROR] No service account credentials found! Checked ${localPath}, ${renderSecretPath}, and FIREBASE_SERVICE_ACCOUNT env.`);
-  admin.initializeApp();
+  console.log('[FIREBASE] Admin SDK initialized with hardcoded credentials');
+} catch (initErr) {
+  console.warn('[FIREBASE] Init warning:', initErr.message);
 }
 
 const db = admin.firestore();
 const auth = admin.auth();
 
-module.exports = { admin, db, auth, app };
+module.exports = { admin, db, auth };
