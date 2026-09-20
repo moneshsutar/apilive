@@ -209,36 +209,56 @@ export async function getPlans() {
 
 // ─── Subscriptions ────────────────────────────────────────
 export async function createSubscription(token, data) {
+  let res = null;
   try {
-    return await apiRequest('/subscriptions/create', { method: 'POST', body: data, token });
+    res = await apiRequest('/subscriptions/create', { method: 'POST', body: data, token });
   } catch (apiErr) {
     console.warn('API createSubscription warning, using client fallback:', apiErr.message);
-    const user = auth.currentUser;
-    const subId = `sub_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
-    const start = new Date(data.startDate || Date.now());
-    const end = new Date(start);
-    end.setMonth(end.getMonth() + 1);
-    const subData = {
-      id: subId,
-      userId: user?.uid || 'user',
-      planId: data.planId || 'monthly',
-      status: 'pending',
-      startDate: start.toISOString(),
-      endDate: end.toISOString(),
-      createdAt: new Date().toISOString(),
-    };
-    try {
-      await setDoc(doc(db, 'subscriptions', subId), subData);
-    } catch (e) {
-      console.warn('Client Firestore subscription save warning:', e);
-    }
-    return {
-      message: 'Subscription created',
-      subscriptionId: subId,
-      subscription: subData,
-      plan: { name: 'Subscription Plan', price: 1999, currency: 'INR', durationMonths: 1 },
-    };
   }
+
+  const user = auth.currentUser;
+  const subId = res?.subscriptionId || `sub_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+  const start = new Date(data.startDate || Date.now());
+  const end = new Date(start);
+  const duration = data.planId === 'yearly' ? 12 : data.planId === 'six_month' ? 6 : 1;
+  end.setMonth(end.getMonth() + duration);
+  end.setSeconds(end.getSeconds() - 1);
+
+  const subData = {
+    id: subId,
+    userId: user?.uid || '',
+    userEmail: user?.email || '',
+    planId: data.planId || 'monthly',
+    planNameSnapshot: data.planId === 'yearly' ? '1 Year' : data.planId === 'six_month' ? '6 Months' : '1 Month',
+    durationMonths: duration,
+    priceSnapshot: data.planId === 'yearly' ? 17999 : data.planId === 'six_month' ? 9999 : 1999,
+    currencySnapshot: 'INR',
+    status: 'pending',
+    startDate: start.toISOString(),
+    endDate: end.toISOString(),
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    ...(res?.subscription || {}),
+  };
+
+  try {
+    // Write directly to client-side Firestore so the collection is always created!
+    await setDoc(doc(db, 'subscriptions', subId), subData, { merge: true });
+  } catch (e) {
+    console.warn('Client Firestore subscription save warning:', e);
+  }
+
+  return {
+    message: 'Subscription created',
+    subscriptionId: subId,
+    subscription: subData,
+    plan: res?.plan || {
+      name: subData.planNameSnapshot,
+      price: subData.priceSnapshot,
+      currency: 'INR',
+      durationMonths: duration,
+    },
+  };
 }
 
 export async function getCurrentSubscription(token) {
@@ -314,12 +334,49 @@ export async function getSubscriptionHistory(token, params = {}) {
 
 // ─── Payments ─────────────────────────────────────────────
 export async function createPaymentOrder(token, data) {
+  let res = null;
   try {
-    return await apiRequest('/payments/create-order', { method: 'POST', body: data, token });
+    res = await apiRequest('/payments/create-order', { method: 'POST', body: data, token });
   } catch (apiErr) {
     console.warn('API createPaymentOrder error:', apiErr.message);
     throw apiErr;
   }
+
+  // Directly save the payment order document into client-side Firestore!
+  try {
+    const user = auth.currentUser;
+    const orderId = res?.orderId || res?.gatewayOrderId || `txn_${Date.now()}`;
+    const orderDocData = {
+      orderId,
+      gatewayOrderId: orderId,
+      userId: user?.uid || '',
+      userEmail: user?.email || '',
+      subscriptionId: data.subscriptionId || '',
+      planId: data.planId || 'monthly',
+      amount: res?.amount || 1999,
+      currency: res?.currency || 'INR',
+      status: 'pending',
+      paymentstatus: 'pending',
+      paymentUrl: res?.payment_url || res?.paymentUrl || '',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    await setDoc(doc(db, 'paymentOrders', orderId), orderDocData, { merge: true });
+
+    // Link orderId to subscription document
+    if (data.subscriptionId) {
+      await setDoc(
+        doc(db, 'subscriptions', data.subscriptionId),
+        { orderId, updatedAt: new Date().toISOString() },
+        { merge: true }
+      );
+    }
+  } catch (clientDbErr) {
+    console.warn('Client Firestore save paymentOrders warning:', clientDbErr);
+  }
+
+  return res;
 }
 
 export async function getPaymentHistory(token, params = {}) {
@@ -340,6 +397,15 @@ export async function getPaymentHistory(token, params = {}) {
         const payments = [];
         snap.forEach((d) => payments.push({ id: d.id, ...d.data() }));
         return { payments, hasMore: false };
+      }
+
+      // If no confirmed payments yet, show payment orders
+      const ordersQ = query(collection(db, 'paymentOrders'), where('userId', '==', user.uid));
+      const ordersSnap = await getDocs(ordersQ);
+      if (!ordersSnap.empty) {
+        const orders = [];
+        ordersSnap.forEach((d) => orders.push({ id: d.id, ...d.data() }));
+        return { payments: orders, hasMore: false };
       }
     }
   } catch (clientErr) {
