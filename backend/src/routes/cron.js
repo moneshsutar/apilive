@@ -37,6 +37,11 @@ async function deleteQueryDocs(query) {
  * GET/POST /api/cron/expire-subscriptions
  * Publicly accessible - no authentication required
  */
+/**
+ * Route 1: Expire Overdue Subscriptions
+ * GET/POST /api/cron/expire-subscriptions
+ * Publicly accessible - no authentication required
+ */
 router.all(['/', '/expire-subscriptions', '/check-expiry'], async (req, res) => {
   try {
     console.log(`[CRON] Expiry check triggered at ${new Date().toISOString()}`);
@@ -56,11 +61,12 @@ router.all(['/', '/expire-subscriptions', '/check-expiry'], async (req, res) => 
       timestamp: new Date().toISOString(),
     });
   } catch (error) {
-    console.warn('[CRON] Soft warning expiring subscriptions:', error.message);
+    console.warn('[CRON] Warning expiring subscriptions:', error.message);
     const istString = new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' });
     return res.status(200).json({
-      success: true,
-      message: 'Cron job executed (no active subscriptions due for expiration)',
+      success: false,
+      message: 'Failed to expire subscriptions - database access error',
+      error: error.message,
       expiredCount: 0,
       currentTimeIST: istString,
       timestamp: new Date().toISOString(),
@@ -80,6 +86,7 @@ router.all(['/delete-pending', '/cleanup-pending', '/delete-pending-subscription
     let deletedSubscriptions = 0;
     let deletedPaymentOrders = 0;
     let usersCleanedCount = 0;
+    const errors = [];
 
     try {
       // 1. Delete pending subscriptions from 'subscriptions'
@@ -87,6 +94,7 @@ router.all(['/delete-pending', '/cleanup-pending', '/delete-pending-subscription
       deletedSubscriptions = await deleteQueryDocs(pendingSubsQuery);
     } catch (e) {
       console.warn('Delete pending subscriptions query warning:', e.message);
+      errors.push(`Subscriptions: ${e.message}`);
     }
 
     try {
@@ -95,6 +103,7 @@ router.all(['/delete-pending', '/cleanup-pending', '/delete-pending-subscription
       deletedPaymentOrders = await deleteQueryDocs(pendingOrdersQuery);
     } catch (e) {
       console.warn('Delete pending payment orders query warning:', e.message);
+      errors.push(`PaymentOrders: ${e.message}`);
     }
 
     try {
@@ -121,6 +130,7 @@ router.all(['/delete-pending', '/cleanup-pending', '/delete-pending-subscription
       }
     } catch (e) {
       console.warn('Reset user results query warning:', e.message);
+      errors.push(`UsersReset: ${e.message}`);
     }
 
     const istString = new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' });
@@ -128,20 +138,24 @@ router.all(['/delete-pending', '/cleanup-pending', '/delete-pending-subscription
     console.log(`[CRON] Deleted ${deletedSubscriptions} pending subscriptions, ${deletedPaymentOrders} pending payment orders, and cleared results for ${usersCleanedCount} user(s)`);
 
     return res.status(200).json({
-      success: true,
-      message: `Successfully deleted ${deletedSubscriptions} pending subscription(s), ${deletedPaymentOrders} pending payment order(s), and cleared results for ${usersCleanedCount} user(s)`,
+      success: errors.length === 0,
+      message: errors.length > 0 
+        ? `Database operation failed: ${errors.join(' | ')}`
+        : `Successfully deleted ${deletedSubscriptions} pending subscription(s), ${deletedPaymentOrders} pending payment order(s), and cleared results for ${usersCleanedCount} user(s)`,
       deletedSubscriptionsCount: deletedSubscriptions,
       deletedPaymentOrdersCount: deletedPaymentOrders,
       clearedUsersResultsCount: usersCleanedCount,
+      errors: errors.length > 0 ? errors : null,
       currentTimeIST: istString,
       timestamp: new Date().toISOString(),
     });
   } catch (error) {
-    console.warn('[CRON] Soft warning deleting pending records:', error.message);
+    console.warn('[CRON] Warning deleting pending records:', error.message);
     const istString = new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' });
     return res.status(200).json({
-      success: true,
-      message: 'Pending cleanup executed',
+      success: false,
+      message: 'Failed to delete pending records',
+      error: error.message,
       deletedSubscriptionsCount: 0,
       deletedPaymentOrdersCount: 0,
       clearedUsersResultsCount: 0,
