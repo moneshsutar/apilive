@@ -16,33 +16,19 @@ const DEFAULT_PLANS = {
 
 /**
  * Create a payment order
- * Relaxed validations so checkout proceeds seamlessly
+ * Ultra-fast execution: uses passed plan data directly from DB and non-blocking writes
  */
-async function createPaymentOrder(userId, subscriptionId, planId) {
-  // 1. Resolve plan safely
-  let plan = DEFAULT_PLANS[planId] || DEFAULT_PLANS.monthly;
-  try {
-    if (planId) {
-      const planDoc = await db.collection('plans').doc(planId).get();
-      if (planDoc.exists && planDoc.data()?.price) {
-        plan = { id: planDoc.id, ...planDoc.data() };
-      }
-    }
-  } catch (planErr) {
-    console.warn('Payment order plan fetch warning (using fallback plan):', planErr.message);
-  }
+async function createPaymentOrder(userId, subscriptionId, planId, options = {}) {
+  const { amount, planName, customerName, customerEmail, customerMobile } = options;
 
-  // 2. Resolve user safely
-  let user = { displayName: 'Customer', email: '', phone: '9999999999' };
-  try {
-    if (userId) {
-      const userDoc = await db.collection('users').doc(userId).get();
-      if (userDoc.exists) {
-        user = userDoc.data();
-      }
-    }
-  } catch (userErr) {
-    console.warn('Payment order user fetch warning:', userErr.message);
+  // 1. Resolve plan details instantly
+  let planPrice = amount;
+  let duration = options.durationMonths || 1;
+
+  if (!planPrice) {
+    const fallback = DEFAULT_PLANS[planId] || DEFAULT_PLANS.monthly;
+    planPrice = fallback.price;
+    duration = fallback.durationMonths;
   }
 
   const effectiveSubId = subscriptionId || `sub_${Date.now()}`;
@@ -57,14 +43,14 @@ async function createPaymentOrder(userId, subscriptionId, planId) {
   const redirect_url = `${frontendUrl}/dashboard/payments?paid=1`;
 
   const payload = querystring.stringify({
-    customer_name: user?.displayName || "Customer",
-    customer_email: user?.email || "customer@example.com",
-    customer_mobile: user?.phone || "9999999999",
+    customer_name: customerName || "Customer",
+    customer_email: customerEmail || "customer@example.com",
+    customer_mobile: customerMobile || "9999999999",
     user_token: IMB_TOKEN,
-    amount: (plan.price || 1999).toString(),
+    amount: planPrice.toString(),
     order_id: gatewayOrderId,
     redirect_url,
-    remark1: user?.email || "",
+    remark1: customerEmail || "",
     remark2: userId || "",
   });
 
@@ -79,7 +65,7 @@ async function createPaymentOrder(userId, subscriptionId, planId) {
         headers: {
           "Content-Type": "application/x-www-form-urlencoded",
         },
-        timeout: 10000,
+        timeout: 5000,
       }
     );
     imbResponseData = response.data;
@@ -97,22 +83,44 @@ async function createPaymentOrder(userId, subscriptionId, planId) {
     userId: userId || 'unknown',
     subscriptionId: effectiveSubId,
     planId: planId || 'monthly',
-    amount: plan.price || 1999,
-    currency: plan.currency || 'INR',
+    planName: planName || 'Subscription',
+    amount: Number(planPrice),
+    currency: 'INR',
     gateway: 'imb_upi',
     gatewayOrderId,
     order_id: gatewayOrderId,
-    customer_name: user?.displayName || "",
-    customer_email: user?.email || "",
-    customer_mobile: user?.phone || "9999999999",
+    customer_name: customerName || "Customer",
+    customer_email: customerEmail || "",
+    customer_mobile: customerMobile || "9999999999",
     status: 'pending',
     paymentstatus: 'pending',
+    paymentUrl,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };
 
-  try {
-    await db.collection('paymentOrders').doc(orderId).set({
+  // Non-blocking background save so client gets payment URL instantly
+  db.collection('paymentOrders').doc(orderId).set(orderData).catch((dbErr) => {
+    console.warn('Payment order background save warning:', dbErr.message);
+  });
+
+  if (subscriptionId) {
+    db.collection('subscriptions').doc(subscriptionId).update({
+      orderId,
+      updatedAt: new Date().toISOString(),
+    }).catch(() => {});
+  }
+
+  return {
+    orderId,
+    gatewayOrderId,
+    amount: Number(planPrice),
+    currency: 'INR',
+    paymentUrl,
+    imbResponseData,
+    order: orderData,
+  };
+}
       ...orderData,
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),

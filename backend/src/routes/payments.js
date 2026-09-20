@@ -24,7 +24,14 @@ router.post('/create-order', authenticate, async (req, res) => {
       planId = 'monthly';
     }
 
-    const result = await paymentService.createPaymentOrder(uid, subscriptionId, planId);
+    const result = await paymentService.createPaymentOrder(uid, subscriptionId, planId, {
+      amount: req.body.amount,
+      planName: req.body.planName,
+      durationMonths: req.body.durationMonths,
+      customerName: req.user.displayName || req.body.customerName,
+      customerEmail: req.user.email || req.body.customerEmail,
+      customerMobile: req.user.phone || req.body.customerMobile,
+    });
 
     return res.status(200).json({
       success: true,

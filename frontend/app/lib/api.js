@@ -342,7 +342,7 @@ export async function createPaymentOrder(token, data) {
     throw apiErr;
   }
 
-  // Directly save the payment order document into client-side Firestore!
+  // Save payment order to client-side Firestore in parallel without delaying redirect!
   try {
     const user = auth.currentUser;
     const orderId = res?.orderId || res?.gatewayOrderId || `txn_${Date.now()}`;
@@ -353,7 +353,8 @@ export async function createPaymentOrder(token, data) {
       userEmail: user?.email || '',
       subscriptionId: data.subscriptionId || '',
       planId: data.planId || 'monthly',
-      amount: res?.amount || 1999,
+      planName: data.planName || '',
+      amount: res?.amount || data.amount || 1999,
       currency: res?.currency || 'INR',
       status: 'pending',
       paymentstatus: 'pending',
@@ -362,15 +363,16 @@ export async function createPaymentOrder(token, data) {
       updatedAt: new Date().toISOString(),
     };
 
-    await setDoc(doc(db, 'paymentOrders', orderId), orderDocData, { merge: true });
+    setDoc(doc(db, 'paymentOrders', orderId), orderDocData, { merge: true }).catch((e) => {
+      console.warn('paymentOrders setDoc background warning:', e);
+    });
 
-    // Link orderId to subscription document
     if (data.subscriptionId) {
-      await setDoc(
+      setDoc(
         doc(db, 'subscriptions', data.subscriptionId),
         { orderId, updatedAt: new Date().toISOString() },
         { merge: true }
-      );
+      ).catch(() => {});
     }
   } catch (clientDbErr) {
     console.warn('Client Firestore save paymentOrders warning:', clientDbErr);

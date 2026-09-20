@@ -86,30 +86,37 @@ function CheckoutContent() {
 
     try {
       const token = await getToken();
+      const subId = `sub_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
 
-      // Step 1: Create subscription (pending)
-      const subRes = await createSubscription(token, {
-        planId,
+      // Step 1: Save subscription in parallel using DB plan details
+      createSubscription(token, {
+        subscriptionId: subId,
+        planId: plan?.id || planId,
         startDate,
+        price: plan?.price,
+        durationMonths: plan?.durationMonths,
+      }).catch((subErr) => {
+        console.warn('Subscription save in background:', subErr.message);
       });
 
-      // Step 2: Create payment order (server-side price)
+      // Step 2: Create payment order directly with DB plan price (single fast call)
       const orderRes = await createPaymentOrder(token, {
-        subscriptionId: subRes.subscriptionId,
-        planId,
+        subscriptionId: subId,
+        planId: plan?.id || planId,
+        planName: plan?.name,
+        amount: plan?.price,
+        durationMonths: plan?.durationMonths,
       });
 
-      // Step 3: Redirect to UPI payment gateway directly
+      // Step 3: Redirect to UPI payment gateway scanner immediately!
       const paymentUrl = orderRes.payment_url || orderRes.paymentUrl || orderRes.url;
       if (paymentUrl) {
         window.location.href = paymentUrl;
       } else {
         setSuccess(true);
       }
-
     } catch (err) {
       setError(err.message || 'Failed to process payment');
-    } finally {
       setProcessing(false);
     }
   };
