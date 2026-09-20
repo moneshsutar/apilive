@@ -21,4 +21,3 @@ yarn-error.log*
 Thumbs.db
 
 backend/.env
-backend/serviceAccountKey.json
